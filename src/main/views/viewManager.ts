@@ -25,9 +25,9 @@ import Config from 'common/config';
 import urlUtils from 'common/utils/url';
 import Utils from 'common/utils/util';
 import {MattermostServer} from 'common/servers/MattermostServer';
-import {getServerView, getTabViewName, TabTuple, TabView} from 'common/tabs/TabView';
+import {getServerView, getTabViewName, TabTuple, TabView, TabType} from 'common/tabs/TabView';
 import {pipe} from 'common/utils/functions'
-import {map, bind, sort, by} from 'common/utils/data'
+import {map, bind, sort, by, foldl} from 'common/utils/data'
 
 import {ServerInfo} from 'main/server/serverInfo';
 
@@ -39,6 +39,10 @@ import WebContentsEventManager from './webContentEvents';
 
 const URL_VIEW_DURATION = 10 * SECOND;
 const URL_VIEW_HEIGHT = 20;
+
+function mapFrom<K, V>(xs: Iterable<[K, V]>): Map<K, V> {
+    return new Map(xs) as Map<K, V>;
+}
 
 enum LoadingScreenState {
     VISIBLE = 1,
@@ -149,7 +153,9 @@ export class ViewManager {
             return {srv, info, view, open, tab};
         }
 
-        const focusedTuple = this.views.get(this.currentView)?.tuple;
+        const focusedTuple = this.currentView && this.views.has(this.currentView)
+            ? this.views.get(this.currentView)!.tuple
+            : undefined;
 
         // We create two Maps representing the current and the
         // incoming tabs, then we spot the differences. The incoming
@@ -160,20 +166,20 @@ export class ViewManager {
         const current: Map<TabTuple, MattermostView> = pipe(
             this.views.values(),
             map((x: MattermostView): [TabTuple, MattermostView] => [x.tuple, x]),
-            (x: [TabTuple, MattermostView]): Map<TabTuple, mattermostview> => new Map(x));
+            mapFrom)
 
         const closed: Map<TabTuple, {srv: MattermostServer, tab: Tab}> = new Map();
 
-        const views = pipe(
+        const views: Map<TabTuple, MattermostView> = pipe(
             configServers,
             bind((x: TeamWithTabs) => pipe(
                 x.tabs,
                 sort(by((x: Tab) => x.order)),
-                map((t: Tab) => [tuple(t.name, x.url), extraData(x, t)]),
+                map((t: Tab): [TabTuple, ExtraData] => [tuple(x.url, t.name as TabType), extraData(x, t)]),
             )),
-            (x) => new Map(x),
+            mapFrom,
             foldl(
-                (views) => ([tuple, data]: [TabTuple, ExtraData]) => {
+                (views: Map<TabTuple, MattermostView>) => ([tuple, data]: [TabTuple, ExtraData]) => {
                     const recycle: MattermostView | undefined = current.get(tuple);
                     if (!data.open) {
                         closed.set(tuple, {srv: data.srv, tab: data.tab})
@@ -183,16 +189,16 @@ export class ViewManager {
                         recycle.tab.server = data.srv;
                         views.set(tuple, recycle);
                     } else {
-                        views.set(this.makeView(data.srv, data.info, data.view));
+                        views.set(tuple, this.makeView(data.srv, data.info, data.tab, tuple[0]));
                     }
                     return views;
                 },
                 new Map()));
 
         this.views = pipe(
-            views.entries(),
-            map(([tuple, view]) => [view.name, view]),
-            (x) => new Map(x));
+            views.values(),
+            map((x: MattermostView): [string, MattermostView] => [x.name, x]),
+            mapFrom)
 
         for (const unused of current.values()) {
             unused.destroy();
@@ -200,9 +206,9 @@ export class ViewManager {
 
         if (focusedTuple && views.has(focusedTuple)) {
             const view = views.get(focusedTuple);
-            this.currentView = view.name;
+            this.currentView = view!.name;
             this.mainWindow.webContents.send(SET_ACTIVE_VIEW);
-            this.showByName(view.name);
+            this.showByName(view!.name);
         } else {
             delete this.currentView;
             this.showInitial();

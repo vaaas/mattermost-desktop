@@ -139,3 +139,16 @@ export function by(f: (x: any) => number|string): (a: any, b: any) => number {
         }
     }
 }
+
+export function foldl<A, B>(
+    f: (a: B) => (x: A) => B,
+    i: B
+): (xs: Iterable<A>) => B {
+    return function (xs) {
+        let a = i;
+        for (const x of xs) {
+            a = f(a)(x);
+        }
+        return a;
+    }
+}
