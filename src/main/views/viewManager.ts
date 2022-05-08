@@ -170,14 +170,17 @@ export class ViewManager {
 
         const closed: Map<TabTuple, {srv: MattermostServer, tab: Tab}> = new Map();
 
+        console.log('current are', current)
+
         const views: Map<TabTuple, MattermostView> = pipe(
             configServers,
             bind((x: TeamWithTabs) => pipe(
                 x.tabs,
                 sort(by((x: Tab) => x.order)),
-                map((t: Tab): [TabTuple, ExtraData] => [tuple(x.url, t.name as TabType), extraData(x, t)]),
+                map((t: Tab): [TabTuple, ExtraData] => [tuple(new URL(x.url).href, t.name as TabType), extraData(x, t)]),
             )),
             mapFrom,
+            (x => { console.log(x) ; return x }),
             foldl(
                 (views: Map<TabTuple, MattermostView>) => ([tuple, data]: [TabTuple, ExtraData]) => {
                     const recycle: MattermostView | undefined = current.get(tuple);
