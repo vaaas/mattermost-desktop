@@ -26,6 +26,7 @@ import urlUtils from 'common/utils/url';
 import Utils from 'common/utils/util';
 import {MattermostServer} from 'common/servers/MattermostServer';
 import {getServerView, getTabViewName, TabTuple} from 'common/tabs/TabView';
+import {pipe} from 'common/util/functions'
 
 import {ServerInfo} from 'main/server/serverInfo';
 
@@ -155,36 +156,42 @@ export class ViewManager {
         // destroyed. If the incoming server tab is already opened,
         // move the view over from the current tabs to prevent its
         // deletion.
-        const current: Map<TabTuple, MattermostView> = this.views
-            |> map(%, (x) => [x.tuple, x])
-            |> new Map(%);
+        const current: Map<TabTuple, MattermostView> = pipe(
+            this.views,
+            map((x) => [x.tuple, x]),
+            (x) => new Map(x));
 
         const closed: Map<TabTuple, {srv: MattermostServer, tab: Tab}> = new Map();
 
-        const views = configServers
-            |> bind(%, (x: TeamWithTabs) =>
-                x.tabs
-                |> sort(%, by((x: Tab) => x.order))
-                |> map(%, (t: Tab) => [tuple(t.name, x.url), extraData(x, t)])
-            |> new Map(%)
-            |> fold(%, new Map(), (views, [tuple: TabTuple, data: ExtraData]) => {
-                const recycle: MattermostView | undefined = current.get(tuple);
-                if (!data.open) {
-                    closed.set(tuple, {srv: data.srv, tab: data.tab})
-                } else if (recycle) {
-                    current.delete(tuple);
-                    recycle.serverInfo = data.info;
-                    recycle.tab.server = data.srv;
-                    views.set(tuple, recycle);
-                } else {
-                    views.set(this.makeView(data.srv, data.info, data.view));
-                }
-                return views;
-            });
+        const views = pipe(
+            configServers,
+            bind((x: TeamWithTabs) => pipe(
+                x.tabs,
+                sort(by((x: Tab) => x.order)),
+                map((t: Tab) => [tuple(t.name, x.url), extraData(x, t)]),
+            )),
+            (x) => new Map(x),
+            foldl(
+                (views) => ([tuple, data]: [TabTuple, ExtraData]) => {
+                    const recycle: MattermostView | undefined = current.get(tuple);
+                    if (!data.open) {
+                        closed.set(tuple, {srv: data.srv, tab: data.tab})
+                    } else if (recycle) {
+                        current.delete(tuple);
+                        recycle.serverInfo = data.info;
+                        recycle.tab.server = data.srv;
+                        views.set(tuple, recycle);
+                    } else {
+                        views.set(this.makeView(data.srv, data.info, data.view));
+                    }
+                    return views;
+                },
+                new Map()));
 
-        this.views = views.entries()
-            |> map(%, ([tuple, view]) => [view.name, view])
-            |> new Map(%);
+        this.views = pipe(
+            views.entries(),
+            map(([tuple, view]) => [view.name, view]),
+            (x) => new Map(x));
 
         for (const unused of current) {
             unused.destroy();
