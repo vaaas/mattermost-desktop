@@ -27,6 +27,7 @@ import Utils from 'common/utils/util';
 import {MattermostServer} from 'common/servers/MattermostServer';
 import {getServerView, getTabViewName, TabTuple, TabView} from 'common/tabs/TabView';
 import {pipe} from 'common/utils/functions'
+import {map, bind, sort, by} from 'common/utils/data'
 
 import {ServerInfo} from 'main/server/serverInfo';
 
@@ -148,7 +149,7 @@ export class ViewManager {
             return {srv, info, view, open, tab};
         }
 
-        const focusedTuple: TabTuple | undefined = this.views.get(this.currentView)?.tuple;
+        const focusedTuple = this.views.get(this.currentView)?.tuple;
 
         // We create two Maps representing the current and the
         // incoming tabs, then we spot the differences. The incoming
@@ -157,9 +158,9 @@ export class ViewManager {
         // move the view over from the current tabs to prevent its
         // deletion.
         const current: Map<TabTuple, MattermostView> = pipe(
-            this.views,
-            map((x) => [x.tuple, x]),
-            (x) => new Map(x));
+            this.views.values(),
+            map((x: MattermostView): [TabTuple, MattermostView] => [x.tuple, x]),
+            (x: [TabTuple, MattermostView]): Map<TabTuple, mattermostview> => new Map(x));
 
         const closed: Map<TabTuple, {srv: MattermostServer, tab: Tab}> = new Map();
 

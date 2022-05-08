@@ -1,8 +1,10 @@
-/** Runtime implementation of F#-style function pipelines.
- * It isn't pretty, nor is it elegant, but it typechecks perfectly.
- * There are signatures for up to 10 functions, which should cover most cases.
- * Add more as needed.
- */
+// Copyright (c) 2016-present Mattermost, Inc. All Rights Reserved.
+// See LICENSE.txt for license information.
+
+// Runtime implementation of F#-style function pipelines.  It isn't
+// pretty, nor is it elegant, but it typechecks perfectly.  There are
+// signatures for up to 10 functions, which should cover most cases.
+// Add more as needed.
 
 export function pipe<A, B>(
     a: A,
