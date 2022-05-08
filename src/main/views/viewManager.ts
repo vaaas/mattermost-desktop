@@ -25,8 +25,8 @@ import Config from 'common/config';
 import urlUtils from 'common/utils/url';
 import Utils from 'common/utils/util';
 import {MattermostServer} from 'common/servers/MattermostServer';
-import {getServerView, getTabViewName, TabTuple} from 'common/tabs/TabView';
-import {pipe} from 'common/util/functions'
+import {getServerView, getTabViewName, TabTuple, TabView} from 'common/tabs/TabView';
+import {pipe} from 'common/utils/functions'
 
 import {ServerInfo} from 'main/server/serverInfo';
 
@@ -84,10 +84,6 @@ export class ViewManager {
 
     makeView = (srv: MattermostServer, serverInfo: ServerInfo, tab: Tab, url?: string): MattermostView => {
         const tabView = getServerView(srv, tab);
-        if (!tab.isOpen) {
-            this.closedViews.set(tabView.name, {srv, tab});
-            return;
-        }
         if (this.closedViews.has(tabView.name)) {
             this.closedViews.delete(tabView.name);
         }
@@ -101,14 +97,18 @@ export class ViewManager {
     }
 
     addView = (view: MattermostView): void => {
-        this.views.set(tabView.name, view);
+        this.views.set(view.name, view);
         if (!this.loadingScreen) {
             this.createLoadingScreen();
         }
     }
 
     loadView = (srv: MattermostServer, serverInfo: ServerInfo, tab: Tab, url?: string) => {
-        this.addView(this.makeView(srv, serverinfo, tab, url));
+        if (!tab.isOpen) {
+            this.closedViews.set(getTabViewName(srv.name, tab.name), {srv, tab});
+            return;
+        }
+        this.addView(this.makeView(srv, serverInfo, tab, url));
     }
 
     reloadViewIfNeeded = (viewName: string) => {
@@ -133,7 +133,7 @@ export class ViewManager {
         );
 
         type ExtraData = {
-            srv: MattermostView,
+            srv: MattermostServer,
             info: ServerInfo,
             tab: Tab,
             view: TabView,
@@ -141,10 +141,10 @@ export class ViewManager {
         };
 
         const extraData = (server: TeamWithTabs, tab: Tab): ExtraData => {
-            const srv = new MattermostServer(x.name, x.url);
+            const srv = new MattermostServer(server.name, server.url);
             const info = new ServerInfo(srv);
             const view = getServerView(srv, tab);
-            const open = tab.isOpen;
+            const open = Boolean(tab.isOpen);
             return {srv, info, view, open, tab};
         }
 
@@ -193,7 +193,7 @@ export class ViewManager {
             map(([tuple, view]) => [view.name, view]),
             (x) => new Map(x));
 
-        for (const unused of current) {
+        for (const unused of current.values()) {
             unused.destroy();
         }
 
