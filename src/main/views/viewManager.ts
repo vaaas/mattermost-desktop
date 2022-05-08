@@ -3,6 +3,7 @@
 import log from 'electron-log';
 import {BrowserView, BrowserWindow, dialog, ipcMain, IpcMainEvent} from 'electron';
 import {BrowserViewConstructorOptions} from 'electron/main';
+import {Tuple as tuple} from '@bloomberg/record-tuple-polyfill';
 
 import {Tab, TeamWithTabs} from 'types/config';
 
@@ -24,7 +25,7 @@ import Config from 'common/config';
 import urlUtils from 'common/utils/url';
 import Utils from 'common/utils/util';
 import {MattermostServer} from 'common/servers/MattermostServer';
-import {getServerView, getTabViewName} from 'common/tabs/TabView';
+import {getServerView, getTabViewName, TabTuple} from 'common/tabs/TabView';
 
 import {ServerInfo} from 'main/server/serverInfo';
 
@@ -80,7 +81,7 @@ export class ViewManager {
         server.tabs.forEach((tab) => this.loadView(srv, serverInfo, tab));
     }
 
-    loadView = (srv: MattermostServer, serverInfo: ServerInfo, tab: Tab, url?: string) => {
+    makeView = (srv: MattermostServer, serverInfo: ServerInfo, tab: Tab, url?: string): MattermostView => {
         const tabView = getServerView(srv, tab);
         if (!tab.isOpen) {
             this.closedViews.set(tabView.name, {srv, tab});
@@ -90,15 +91,23 @@ export class ViewManager {
             this.closedViews.delete(tabView.name);
         }
         const view = new MattermostView(tabView, serverInfo, this.mainWindow, this.viewOptions);
-        this.views.set(tabView.name, view);
-        if (!this.loadingScreen) {
-            this.createLoadingScreen();
-        }
         view.once(LOAD_SUCCESS, this.activateView);
         view.load(url);
         view.on(UPDATE_TARGET_URL, this.showURLView);
         view.on(LOADSCREEN_END, this.finishLoading);
         view.on(LOAD_FAILED, this.failLoading);
+        return view
+    }
+
+    addView = (view: MattermostView): void => {
+        this.views.set(tabView.name, view);
+        if (!this.loadingScreen) {
+            this.createLoadingScreen();
+        }
+    }
+
+    loadView = (srv: MattermostServer, serverInfo: ServerInfo, tab: Tab, url?: string) => {
+        this.addView(this.makeView(srv, serverinfo, tab, url));
     }
 
     reloadViewIfNeeded = (viewName: string) => {
@@ -112,45 +121,82 @@ export class ViewManager {
         this.configServers.forEach((server) => this.loadServer(server));
     }
 
+    /** Called when a new configuration is received */
     reloadConfiguration = (configServers: TeamWithTabs[]) => {
-        this.configServers = configServers.concat();
-        const oldviews = this.views;
-        this.views = new Map();
-        const sorted = this.configServers.sort((a, b) => a.order - b.order);
-        let setFocus;
-        sorted.forEach((server) => {
-            const srv = new MattermostServer(server.name, server.url);
-            const serverInfo = new ServerInfo(srv);
-            server.tabs.forEach((tab) => {
-                const tabView = getServerView(srv, tab);
-                const recycle = oldviews.get(tabView.name);
-                if (recycle && recycle.name === this.currentView) {
-                    setFocus = recycle.name;
-                }
-                if (!tab.isOpen) {
-                    this.closedViews.set(tabView.name, {srv, tab});
-                } else if (recycle && recycle.tab.name === tabView.name && recycle.tab.url.toString() === urlUtils.parseURL(tabView.url)!.toString()) {
-                    oldviews.delete(recycle.name);
-                    this.views.set(recycle.name, recycle);
-                } else {
-                    this.loadView(srv, serverInfo, tab);
-                }
-            });
-        });
-        if (this.currentView && (oldviews.has(this.currentView) || this.closedViews.has(this.currentView))) {
-            if (configServers.length) {
-                delete this.currentView;
-                this.showInitial();
-            } else {
-                this.mainWindow.webContents.send(SET_ACTIVE_VIEW);
-            }
+        // Servers or tabs have been added or edited. We need to
+        // close, open, or reload tabs, taking care to reuse tabs and
+        // preserve focus on the currently selected tab.
+        console.log('>>>>>>>>>>>>>>>>',
+            'incoming', configServers, configServers.map(x => x.tabs),
+            'current', this.views,
+        );
+
+        type ExtraData = {
+            srv: MattermostView,
+            info: ServerInfo,
+            tab: Tab,
+            view: TabView,
+            open: boolean,
+        };
+
+        const extraData = (server: TeamWithTabs, tab: Tab): ExtraData => {
+            const srv = new MattermostServer(x.name, x.url);
+            const info = new ServerInfo(srv);
+            const view = getServerView(srv, tab);
+            const open = tab.isOpen;
+            return {srv, info, view, open, tab};
         }
-        oldviews.forEach((unused) => {
+
+        const focusedTuple: TabTuple | undefined = this.views.get(this.currentView)?.tuple;
+
+        // We create two Maps representing the current and the
+        // incoming tabs, then we spot the differences. The incoming
+        // tabs will become the new tabs, and the current tabs will be
+        // destroyed. If the incoming server tab is already opened,
+        // move the view over from the current tabs to prevent its
+        // deletion.
+        const current: Map<TabTuple, MattermostView> = this.views
+            |> map(%, (x) => [x.tuple, x])
+            |> new Map(%);
+
+        const closed: Map<TabTuple, {srv: MattermostServer, tab: Tab}> = new Map();
+
+        const views = configServers
+            |> bind(%, (x: TeamWithTabs) =>
+                x.tabs
+                |> sort(%, by((x: Tab) => x.order))
+                |> map(%, (t: Tab) => [tuple(t.name, x.url), extraData(x, t)])
+            |> new Map(%)
+            |> fold(%, new Map(), (views, [tuple: TabTuple, data: ExtraData]) => {
+                const recycle: MattermostView | undefined = current.get(tuple);
+                if (!data.open) {
+                    closed.set(tuple, {srv: data.srv, tab: data.tab})
+                } else if (recycle) {
+                    current.delete(tuple);
+                    recycle.serverInfo = data.info;
+                    recycle.tab.server = data.srv;
+                    views.set(tuple, recycle);
+                } else {
+                    views.set(this.makeView(data.srv, data.info, data.view));
+                }
+                return views;
+            });
+
+        this.views = views.entries()
+            |> map(%, ([tuple, view]) => [view.name, view])
+            |> new Map(%);
+
+        for (const unused of current) {
             unused.destroy();
-        });
-        if (setFocus) {
-            this.showByName(setFocus);
+        }
+
+        if (focusedTuple && views.has(focusedTuple)) {
+            const view = views.get(focusedTuple);
+            this.currentView = view.name;
+            this.mainWindow.webContents.send(SET_ACTIVE_VIEW);
+            this.showByName(view.name);
         } else {
+            delete this.currentView;
             this.showInitial();
         }
     }
