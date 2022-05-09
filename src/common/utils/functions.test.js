@@ -106,6 +106,7 @@ describe('common/utils/functions', () => {
                 inc,
             )).toBe(10);
         });
+    });
 
     describe('compose', () => {
         it('should compose 2 arguments', () => {
