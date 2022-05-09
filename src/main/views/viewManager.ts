@@ -197,13 +197,20 @@ export class ViewManager {
             unused.destroy();
         }
 
+        if (focusedTuple && (current.has(focusedTuple) || closed.has(focusedTuple))) {
+            if (configServers.length) {
+                delete this.currentView;
+                this.showInitial();
+            } else {
+                this.mainWindow.webContents.send(SET_ACTIVE_VIEW);
+            }
+        }
+
         if (focusedTuple && views.has(focusedTuple)) {
             const view = views.get(focusedTuple);
             this.currentView = view!.name;
-            this.mainWindow.webContents.send(SET_ACTIVE_VIEW);
             this.showByName(view!.name);
         } else {
-            delete this.currentView;
             this.showInitial();
         }
     }

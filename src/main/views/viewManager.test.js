@@ -177,6 +177,9 @@ describe('main/views/viewManager', () => {
             viewManager.loadView = jest.fn();
             viewManager.showByName = jest.fn();
             viewManager.showInitial = jest.fn();
+            viewManager.mainWindow.webContents = {
+                send: jest.fn(),
+            };
 
             getServerView.mockImplementation((srv, tab) => ({
                 name: `${srv.name}-${tab.name}`,
@@ -289,6 +292,7 @@ describe('main/views/viewManager', () => {
                     name: 'server1-tab1',
                     url: new URL('http://server1.com'),
                 },
+                tuple: tuple('http://server1.com/', 'tab1'),
                 destroy: jest.fn(),
             };
             viewManager.currentView = 'server1-tab1';
@@ -307,6 +311,7 @@ describe('main/views/viewManager', () => {
                 },
             ]);
             expect(viewManager.showByName).toHaveBeenCalledWith('server1-tab1');
+            expect(viewManager.mainWindow.webContents.send).not.toHaveBeenCalled();
         });
 
         it('should show initial if currentView has been removed', () => {
