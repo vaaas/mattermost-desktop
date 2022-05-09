@@ -2,7 +2,7 @@
 // See LICENSE.txt for license information.
 'use strict';
 
-import {D, DR, DL} from 'common/utils/combinators';
+import {D, DR, DL, I} from 'common/utils/combinators';
 
 const add = a => b => a+b;
 
@@ -18,7 +18,7 @@ describe('common/utils/combinators', () => {
     describe('DL', () => {
         it('should filter the first argument of a binary function', () => {
             expect(
-                DR(add)(parseFloat)('1')(2)
+                DL(add)(parseFloat)('1')(2)
             ).toBe(3);
         });
     });
@@ -30,7 +30,7 @@ describe('common/utils/combinators', () => {
     });
 
     describe('I', () => {
-        it('should always return its first argument') {
+        it('should always return its first argument', () => {
             expect(I(1)).toBe(1);
             expect(I(null)).toBe(null);
             expect(I(1, null)).toBe(1);

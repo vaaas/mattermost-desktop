@@ -3,10 +3,6 @@
 
 // Utility functions for data structures.
 
-export interface ObjectMap<T> {
-    [key: string|number]: T;
-};
-
 export function isIterable(x: any): boolean {
     if (x == null) {
         return false;
@@ -16,15 +12,15 @@ export function isIterable(x: any): boolean {
 }
 
 /** generic implementation of map */
-export function map<A, B>(f: (x: A) => B): {
+export function map<A, B, K>(f: (x: A) => B): {
     (xs: Array<A>): Array<B>,
     (xs: Promise<A>): Promise<B>,
     (xs: Set<A>): Set<B>,
-    <K>(xs: Map<K, A>): Map<K, B>,
-    (xs: ObjectMap<A>: ObjectMap<B>,
+    (xs: Map<K, A>): Map<K, B>,
+    (xs: {[key: string]: A}): {[key: string]: B},
     (xs: Iterable<A>): Iterable<B>,
-    (xs: any): any,
-} {
+};
+export function map<A, B>(f: (x: A) => B): (xs: any) => any {
     return function (xs) {
         if (!xs) {
             throw new TypeError('invalid collection type');
@@ -47,7 +43,7 @@ export function map<A, B>(f: (x: A) => B): {
 }
 
 // helper functions for map
-function mapSet<A, B>(f: (x: A) => B, xs: Set<A>): Set<B> {
+export function mapSet<A, B>(f: (x: A) => B, xs: Set<A>): Set<B> {
     const s: Set<B> = new Set();
     for (const x of xs) {
         s.add(f(x));
@@ -55,7 +51,7 @@ function mapSet<A, B>(f: (x: A) => B, xs: Set<A>): Set<B> {
     return s;
 }
 
-function mapMap<A, B, K>(f: (x: A) => B, xs: Map<K, A>): Map<K, B> {
+export function mapMap<A, B, K>(f: (x: A) => B, xs: Map<K, A>): Map<K, B> {
     const m: Map<K, B> = new Map();
     for (const [k, x] of xs.entries()) {
         m.set(k, f(x));
@@ -63,7 +59,7 @@ function mapMap<A, B, K>(f: (x: A) => B, xs: Map<K, A>): Map<K, B> {
     return m;
 }
 
-function mapRecord<A, B>(f: (x: A) => B, xs: ObjectMap<A>): ObjectMap<B> {
+export function mapRecord<A, B>(f: (x: A) => B, xs: {[key: string]: A}): {[key: string]: B} {
     const o: {[key: string]: B} = {};
     for (const [k, x] of Object.entries(xs)) {
         o[k] = f(x);
@@ -71,7 +67,7 @@ function mapRecord<A, B>(f: (x: A) => B, xs: ObjectMap<A>): ObjectMap<B> {
     return o;
 }
 
-function* mapIterable<A, B>(f: (x: A) => B, xs: Iterable<A>): Iterable<B> {
+export function* mapIterable<A, B>(f: (x: A) => B, xs: Iterable<A>): Iterable<B> {
     for (const x of xs) {
         yield f(x);
     }
@@ -130,7 +126,7 @@ export function sort<T>(f: (a: T, b: T) => number): (xs: Array<T>|Iterable<T>) =
     }
 }
 
-export function by<T>(f: (x: T) => number|string): (a: T, b: T) => number {
+export function by(f: (x: any) => number|string): (a: any, b: any) => number {
     return function (a, b) {
         const fa = f(a);
         const fb = f(b);
@@ -158,7 +154,7 @@ export function foldl<A, B>(
 }
 
 export function foldr<A, B>(
-    f: (a: A) => (x: B) => B,
+    f: (x: A) => (a: B) => B,
     i: B
 ): (xs: Iterable<A>) => B {
     return function (xs) {
@@ -168,32 +164,4 @@ export function foldr<A, B>(
         }
         return a;
     }
-}
-
-export function insert<A>(x: A): {
-    (xs: Array<A>): Array<A>,
-    (xs: Set<A>): Set<A>,
-};
-export function insert<A>(x: [string, A]): {[key: string]: A};
-export function insert<K, A>(x: [K, A]): Map<K, A>;
-export function insert(x: any): any => any {
-    return function (xs) {
-        if (!xs) {
-            throw new TypeError('invalid collection');
-        } else if (Array.isArray(xs)) {
-            xs.push(x);
-            return xs;
-        } else if (xs instanceof Set) {
-            xs.add(x);
-            return xs;
-        } else if (xs instanceof Map) {
-            xs.set(x[0], x[1];
-            return xs;
-        } else if (typeof xs === 'object') {
-            xs[x[0]] = x[1];
-            return xs;
-        } else {
-            throw new Typeof('invalid collection');
-        }
-    };
 }
