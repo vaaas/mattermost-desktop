@@ -7,7 +7,7 @@ import {Tuple as tuple} from '@bloomberg/record-tuple-polyfill';
 
 import {Tab, TeamWithTabs} from 'types/config';
 
-import {SECOND} from 'common/utils/constants';
+import {SECOND, TAB_BAR_HEIGHT} from 'common/utils/constants';
 import {
     UPDATE_TARGET_URL,
     LOAD_SUCCESS,
@@ -378,7 +378,7 @@ export class ViewManager {
             const localURL = getLocalURLString('urlView.html', query);
             urlView.webContents.loadURL(localURL);
             this.mainWindow.addBrowserView(urlView);
-            const boundaries = this.mainWindow.getBounds();
+            const boundaries = this.views.get(this.currentView || '')?.view.getBounds() ?? this.mainWindow.getBounds();
 
             const hideView = () => {
                 delete this.urlViewCancel;
@@ -394,12 +394,15 @@ export class ViewManager {
             const adjustWidth = (event: IpcMainEvent, width: number) => {
                 log.silly('showURLView.adjustWidth', width);
 
-                urlView.setBounds({
+                const bounds = {
                     x: 0,
-                    y: boundaries.height - URL_VIEW_HEIGHT,
+                    y: (boundaries.height + TAB_BAR_HEIGHT) - URL_VIEW_HEIGHT,
                     width: width + 5, // add some padding to ensure that we don't cut off the border
                     height: URL_VIEW_HEIGHT,
-                });
+                };
+
+                log.silly('showURLView setBounds', boundaries, bounds);
+                urlView.setBounds(bounds);
             };
 
             ipcMain.on(UPDATE_URL_VIEW_WIDTH, adjustWidth);
