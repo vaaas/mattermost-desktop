@@ -29,7 +29,7 @@ jest.mock('electron', () => ({
 
 jest.mock('common/tabs/TabView', () => ({
     getServerView: jest.fn(),
-    getTabViewName: jest.fn(),
+    getTabViewName: jest.fn((a, b) => `${a}-${b}`),
 }));
 
 jest.mock('common/servers/MattermostServer', () => ({
@@ -70,10 +70,11 @@ describe('main/views/viewManager', () => {
             viewManager.createLoadingScreen = jest.fn();
             viewManager.showByName = jest.fn();
             getServerView.mockImplementation((srv, tab) => ({name: `${srv.name}-${tab.name}`}));
-            MattermostView.mockImplementation(() => ({
+            MattermostView.mockImplementation((tab) => ({
                 on: jest.fn(),
                 load: loadFn,
                 once: onceFn,
+                name: tab.name,
             }));
         });
 

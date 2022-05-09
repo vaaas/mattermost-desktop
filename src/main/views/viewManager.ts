@@ -109,7 +109,6 @@ export class ViewManager {
     }
 
     loadView = (srv: MattermostServer, serverInfo: ServerInfo, tab: Tab, url?: string) => {
-        console.log('>>>>', srv, serverInfo, tab, url);
         if (!tab.isOpen) {
             this.closedViews.set(getTabViewName(srv.name, tab.name), {srv, tab});
             return;
