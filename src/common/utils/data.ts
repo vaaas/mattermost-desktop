@@ -165,3 +165,18 @@ export function foldr<A, B>(
         return a;
     }
 }
+
+export function partition<T>(f: (x: T) => boolean): (xs: Iterable<T>) => [Array<T>, Array<T>] {
+    return function (xs) {
+        const trues: Array<T> = [];
+        const falses: Array<T> = [];
+        for (const x of xs) {
+            if (f(x)) {
+                trues.push(x);
+            } else {
+                falses.push(x);
+            }
+        }
+        return [trues, falses];
+    };
+}

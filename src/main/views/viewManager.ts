@@ -27,7 +27,7 @@ import Utils from 'common/utils/util';
 import {MattermostServer} from 'common/servers/MattermostServer';
 import {getServerView, getTabViewName, TabTuple, TabView, TabType} from 'common/tabs/TabView';
 import {pipe} from 'common/utils/functions'
-import {map, bind, sort, by, foldl} from 'common/utils/data'
+import {map, bind, sort, by, partition} from 'common/utils/data'
 
 import {ServerInfo} from 'main/server/serverInfo';
 
@@ -140,6 +140,7 @@ export class ViewManager {
             open: boolean,
         };
 
+        // helper functions
         const extraData = (server: TeamWithTabs, tab: Tab): ExtraData => {
             const srv = new MattermostServer(server.name, server.url);
             const info = new ServerInfo(srv);
@@ -148,53 +149,58 @@ export class ViewManager {
             return {srv, info, view, open, tab};
         }
 
+        const newOrRecycledEntry = ([tuple, data]: [TabTuple, ExtraData]): [TabTuple, MattermostView] => {
+            const recycle = current.get(tuple);
+            if (recycle) {
+                recycle.serverInfo = data.info;
+                recycle.tab.server = data.srv;
+                return [tuple, recycle];
+            } else {
+                return [tuple, this.makeView(data.srv, data.info, data.tab, tuple[0])];
+            }
+        }
+
         const focusedTuple = this.currentView && this.views.has(this.currentView)
             ? this.views.get(this.currentView)!.tuple
             : undefined;
 
         const current: Map<TabTuple, MattermostView> = pipe(
             this.views.values(),
-            map((x: MattermostView): [TabTuple, MattermostView] => [x.tuple, x]),
+            map((x): [TabTuple, MattermostView] => [x.tuple, x]),
             mapFrom)
 
-        const closed: Map<TabTuple, {srv: MattermostServer, tab: Tab}> = new Map();
-
-        const views: Map<TabTuple, MattermostView> = pipe(
+        const [views, closed]: [Map<TabTuple, MattermostView>, Map<TabTuple, ExtraData>] = pipe(
             configServers,
             bind((x: TeamWithTabs) => pipe(
                 x.tabs,
-                sort(by((x: Tab) => x.order)),
-                map((t: Tab): [TabTuple, ExtraData] => [tuple(new URL(x.url).href, t.name as TabType), extraData(x, t)]),
-            )),
-            mapFrom,
-            foldl(
-                (views: Map<TabTuple, MattermostView>) => ([tuple, data]: [TabTuple, ExtraData]) => {
-                    const recycle: MattermostView | undefined = current.get(tuple);
-                    if (!data.open) {
-                        closed.set(tuple, data)
-                    } else if (recycle) {
-                        current.delete(tuple);
-                        recycle.serverInfo = data.info;
-                        recycle.tab.server = data.srv;
-                        views.set(tuple, recycle);
-                    } else {
-                        views.set(tuple, this.makeView(data.srv, data.info, data.tab, tuple[0]));
-                    }
-                    return views;
-                },
-                new Map()));
+                sort(by((x) => x.order)),
+                map((t): [TabTuple, ExtraData] => [
+                    tuple(new URL(x.url).href, t.name as TabType),
+                    extraData(x, t)
+                ]))),
+            partition((x) => x[1].open),
+            (([open, closed]) => [
+                mapFrom(map(newOrRecycledEntry)(open)),
+                mapFrom(closed),
+            ]));
 
-        this.views = pipe(
-            views.values(),
-            map((x: MattermostView): [string, MattermostView] => [x.name, x]),
-            mapFrom)
-
-        for (const x of closed.values()) {
-            this.closedViews.set(x.view.name, {srv: x.srv, tab: x.tab});
+        // now actually commit the data to our local state
+        // destroy everything that no longer exists
+        for (const [k, v] of current) {
+            if (!views.has(k)) {
+                v.destroy();
+            }
         }
 
-        for (const unused of current.values()) {
-            unused.destroy();
+        // commit views
+        this.views = pipe(
+            views.values(),
+            map((x): [string, MattermostView] => [x.name, x]),
+            mapFrom)
+
+        // commit closed views
+        for (const x of closed.values()) {
+            this.closedViews.set(x.view.name, {srv: x.srv, tab: x.tab});
         }
 
         if (focusedTuple && (current.has(focusedTuple) || closed.has(focusedTuple))) {
@@ -206,6 +212,7 @@ export class ViewManager {
             }
         }
 
+        // show the focused tab (or initial)
         if (focusedTuple && views.has(focusedTuple)) {
             const view = views.get(focusedTuple);
             this.currentView = view!.name;
