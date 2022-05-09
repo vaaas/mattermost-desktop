@@ -127,11 +127,11 @@ export class ViewManager {
         this.configServers.forEach((server) => this.loadServer(server));
     }
 
-    /** Called when a new configuration is received */
+    /** Called when a new configuration is received
+     * Servers or tabs have been added or edited. We need to
+     * close, open, or reload tabs, taking care to reuse tabs and
+     * preserve focus on the currently selected tab. */
     reloadConfiguration = (configServers: TeamWithTabs[]) => {
-        // Servers or tabs have been added or edited. We need to
-        // close, open, or reload tabs, taking care to reuse tabs and
-        // preserve focus on the currently selected tab.
         type ExtraData = {
             srv: MattermostServer,
             info: ServerInfo,
@@ -152,12 +152,6 @@ export class ViewManager {
             ? this.views.get(this.currentView)!.tuple
             : undefined;
 
-        // We create two Maps representing the current and the
-        // incoming tabs, then we spot the differences. The incoming
-        // tabs will become the new tabs, and the current tabs will be
-        // destroyed. If the incoming server tab is already opened,
-        // move the view over from the current tabs to prevent its
-        // deletion.
         const current: Map<TabTuple, MattermostView> = pipe(
             this.views.values(),
             map((x: MattermostView): [TabTuple, MattermostView] => [x.tuple, x]),
@@ -173,11 +167,12 @@ export class ViewManager {
                 map((t: Tab): [TabTuple, ExtraData] => [tuple(new URL(x.url).href, t.name as TabType), extraData(x, t)]),
             )),
             mapFrom,
+            (x => { console.log('>>>>>>>>>>>>>>>>>>>>>>>>>', x); return x }),
             foldl(
                 (views: Map<TabTuple, MattermostView>) => ([tuple, data]: [TabTuple, ExtraData]) => {
                     const recycle: MattermostView | undefined = current.get(tuple);
                     if (!data.open) {
-                        closed.set(tuple, {srv: data.srv, tab: data.tab})
+                        closed.set(tuple, data)
                     } else if (recycle) {
                         current.delete(tuple);
                         recycle.serverInfo = data.info;
@@ -194,6 +189,10 @@ export class ViewManager {
             views.values(),
             map((x: MattermostView): [string, MattermostView] => [x.name, x]),
             mapFrom)
+
+        for (const x of closed.values()) {
+            this.closedViews.set(x.view.name, {srv: x.srv, tab: x.tab});
+        }
 
         for (const unused of current.values()) {
             unused.destroy();
