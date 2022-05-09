@@ -210,6 +210,7 @@ describe('main/views/viewManager', () => {
         });
 
         it('should recycle existing views', () => {
+            const makeSpy = jest.spyOn(viewManager, 'makeView');
             const view = new MattermostView({
                 name: 'server1-tab1',
                 tuple: tuple(new URL('http://server1.com').href, 'tab1'),
@@ -230,7 +231,8 @@ describe('main/views/viewManager', () => {
                 },
             ]);
             expect(viewManager.views.get('server1-tab1')).toBe(view);
-            expect(viewManager.loadView).not.toHaveBeenCalled();
+            expect(makeSpy).not.toHaveBeenCalled();
+            makeSpy.mockRestore();
         });
 
         it('should close tabs that arent open', () => {
@@ -251,6 +253,7 @@ describe('main/views/viewManager', () => {
         });
 
         it('should create new views for new tabs', () => {
+            const makeSpy = jest.spyOn(viewManager, 'makeView');
             viewManager.reloadConfiguration([
                 {
                     name: 'server1',
@@ -264,13 +267,19 @@ describe('main/views/viewManager', () => {
                     ],
                 },
             ]);
-            expect(viewManager.loadView).toHaveBeenCalledWith({
-                name: 'server1',
-                url: new URL('http://server1.com'),
-            }, expect.any(Object), {
-                name: 'tab1',
-                isOpen: true,
-            });
+            expect(makeSpy).toHaveBeenCalledWith(
+                {
+                    name: 'server1',
+                    url: new URL('http://server1.com'),
+                },
+                expect.any(Object),
+                {
+                    name: 'tab1',
+                    isOpen: true,
+                },
+                'http://server1.com/'
+            );
+            makeSpy.mockRestore();
         });
 
         it('should set focus to current view on reload', () => {

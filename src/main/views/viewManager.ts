@@ -167,7 +167,6 @@ export class ViewManager {
                 map((t: Tab): [TabTuple, ExtraData] => [tuple(new URL(x.url).href, t.name as TabType), extraData(x, t)]),
             )),
             mapFrom,
-            (x => { console.log('>>>>>>>>>>>>>>>>>>>>>>>>>', x); return x }),
             foldl(
                 (views: Map<TabTuple, MattermostView>) => ([tuple, data]: [TabTuple, ExtraData]) => {
                     const recycle: MattermostView | undefined = current.get(tuple);
