@@ -14,6 +14,8 @@ import urlUtils from 'common/utils/url';
 import {MattermostView} from './MattermostView';
 import {ViewManager} from './viewManager';
 
+import {Tuple as tuple} from '@bloomberg/record-tuple-polyfill';
+
 jest.mock('electron', () => ({
     app: {
         getAppPath: () => '/path/to/app',
@@ -65,6 +67,7 @@ describe('main/views/viewManager', () => {
         const viewManager = new ViewManager({});
         const onceFn = jest.fn();
         const loadFn = jest.fn();
+        const destroyFn = jest.fn();
 
         beforeEach(() => {
             viewManager.createLoadingScreen = jest.fn();
@@ -74,6 +77,7 @@ describe('main/views/viewManager', () => {
                 on: jest.fn(),
                 load: loadFn,
                 once: onceFn,
+                destroy: destroyFn,
                 name: tab.name,
             }));
         });
@@ -173,10 +177,27 @@ describe('main/views/viewManager', () => {
             viewManager.loadView = jest.fn();
             viewManager.showByName = jest.fn();
             viewManager.showInitial = jest.fn();
-            getServerView.mockImplementation((srv, tab) => ({name: `${srv.name}-${tab.name}`, url: new URL(`http://${srv.name}.com`)}));
+
+            getServerView.mockImplementation((srv, tab) => ({
+                name: `${srv.name}-${tab.name}`,
+                tuple: tuple(`http://${srv.name}.com/`, tab.name),
+                url: new URL(`http://${srv.name}.com`),
+            }));
             MattermostServer.mockImplementation((name, url) => ({
                 name,
                 url: new URL(url),
+            }));
+            const onceFn = jest.fn();
+            const loadFn = jest.fn();
+            const destroyFn = jest.fn();
+            MattermostView.mockImplementation((tab) => ({
+                on: jest.fn(),
+                load: loadFn,
+                once: onceFn,
+                destroy: destroyFn,
+                name: tab.name,
+                tuple: tab.tuple,
+                tab: tab,
             }));
         });
 
@@ -189,13 +210,11 @@ describe('main/views/viewManager', () => {
         });
 
         it('should recycle existing views', () => {
-            const view = {
+            const view = new MattermostView({
                 name: 'server1-tab1',
-                tab: {
-                    name: 'server1-tab1',
-                    url: new URL('http://server1.com'),
-                },
-            };
+                tuple: tuple(new URL('http://server1.com').href, 'tab1'),
+                server: 'server1',
+            })
             viewManager.views.set('server1-tab1', view);
             viewManager.reloadConfiguration([
                 {
@@ -261,6 +280,7 @@ describe('main/views/viewManager', () => {
                     name: 'server1-tab1',
                     url: new URL('http://server1.com'),
                 },
+                destroy: jest.fn(),
             };
             viewManager.currentView = 'server1-tab1';
             viewManager.views.set('server1-tab1', view);
